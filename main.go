@@ -20,15 +20,9 @@ import (
 
 	"encoding/json"
 
+	"fmt"
 	"github.com/easy-bot/httputil/response"
 	"github.com/easy-bot/imageloader/gallery"
-)
-
-const (
-	//MaxMemory            = 10 * 1024 * 1024
-	//SaveError     string = "[%s] Could not save image: %s\n"
-	MetaDataError string = "[%s] Could not update DB: %s\n"
-	//ListFormError string = "Bad form data: f=%s, q=%s"
 )
 
 //Config stores runtime configuration.
@@ -52,39 +46,37 @@ var dbPool *mgo.Session
 //The image is saved to its configured web root.
 //The function returns the image metadata to be
 //persisted.
-func HandleImage(r *http.Request) (*gallery.Image, error) {
-	file, _, err := r.FormFile("file")
+func HandleImage(r *http.Request, db *mgo.Session) error {
 
+	file, _, err := r.FormFile("file")
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		return err
 	}
 
 	img, _, err := image.Decode(file)
-
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		return err
 	}
 
 	bounds := img.Bounds()
 
 	if uint(bounds.Max.X) < c.MinWidth || uint(bounds.Max.Y) < c.MinHeight {
-		return nil, errors.New("Image must be at least 480x480.")
+		return errors.New("Image must be at least 480x480.")
 	}
 
 	meta := gallery.NewImage(r)
 	meta.Width = bounds.Max.X
 	meta.Height = bounds.Max.Y
 
-	err = SaveImage(&img, meta.Filename)
-
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	if err = SaveImage(&img, meta.Filename); err != nil {
+		return err
 	}
 
-	return meta, nil
+	if err = meta.Persist(db); err != nil {
+		return err
+	}
+
+	return nil
 
 }
 
@@ -95,7 +87,7 @@ func HandleImage(r *http.Request) (*gallery.Image, error) {
 func SaveImage(i *image.Image, out string) error {
 	outf, err := os.Create(filepath.Join(c.OutDir, out))
 	if err != nil {
-		log.Println(err)
+		return err
 	}
 	return png.Encode(outf, *i)
 }
@@ -110,30 +102,34 @@ func InitDb(h string) *mgo.Session {
 	return session
 }
 
+func SendResponse(w http.ResponseWriter, res response.Body) {
+
+	json, err := res.Json()
+	if err != nil {
+		log.Fatal("Could not marhal response body.")
+	}
+
+	fmt.Fprint(w, string(json))
+}
+
 //HandleUpload handles HTTP POST requests to '/upload'
 func HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	res := response.New()
-	meta, err := HandleImage(r)
+	err := HandleImage(r, dbPool.Copy())
 
 	if err != nil {
 		log.Printf("Could not process image upload %s", err)
 		res.Fatal(err.Error())
-		res.Send(w, http.StatusInternalServerError)
-		return
 	}
 
-	err = meta.Persist(dbPool.Copy())
-
-	if err != nil {
-		log.Printf(MetaDataError, meta.Filename, err)
-		res.Fatal("Could not upload image.")
-		res.Send(w, http.StatusInternalServerError)
-		return
+	if res.Fatal {
+		w.WriteHeader(http.StatusInternalServerError)
+	} else {
+		w.WriteHeader(http.StatusOK)
 	}
 
-	res.Append("Image uploaded successfully")
-	res.Send(w, http.StatusOK)
+	SendResponse(w, res)
 }
 
 func ListImages(w http.ResponseWriter, r *http.Request) {
@@ -143,25 +139,30 @@ func ListImages(w http.ResponseWriter, r *http.Request) {
 	images, err := gallery.ListMatch(dbPool.Copy())
 
 	if err != nil {
+		log.Println(err)
 		res.Fatal("Image search failed.")
-		res.Send(w, http.StatusInternalServerError)
-		return
 	}
 
 	if len(images) > 0 {
 		j, err := json.Marshal(images)
 
 		if err != nil {
-			res.Fatal("Internal Server Error")
-			res.Send(w, http.StatusInternalServerError)
-			return
+			log.Println(err)
+			res.Fatal("Could not parse image list.")
 		}
-		res.Data = string(j)
+
+		if j != nil {
+			res.Data = string(j)
+		}
 	}
 
-	res.Send(w, http.StatusOK)
-	return
+	if res.Fatal {
+		w.WriteHeader(http.StatusInternalServerError)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 
+	SendResponse(w, res)
 }
 
 func ProcessArgs() (*Config, *mgo.Session) {
