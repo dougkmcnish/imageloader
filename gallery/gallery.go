@@ -1,52 +1,149 @@
 package gallery
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	"image/png"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
-	"github.com/satori/go.uuid"
+	"github.com/easy-bot/httputil/response"
 	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
 
-//ImageUpload is the metadata for an uploaded image.
-//Filename is a string representation of a generated
-//UUID. The rest is self explanatory
-type Image struct {
-	FirstName string
-	LastName  string
-	Email     string
-	Address   string
-	Filename  string
-	Width     int
-	Height    int
-	Published bool
+type Gallery struct {
+	Config *Config
+	DbPool *mgo.Session
 }
 
-//New creates a new ImageUpload struct. It takes a pointer to http.Request
-//as an argument and returns a pointer to Data.
-func NewImage(r *http.Request) *Image {
-	uuid := uuid.NewV4().String()
-	u := &Image{}
-	u.FirstName = r.FormValue("fname")
-	u.LastName = r.FormValue("lname")
-	u.Address = r.FormValue("address")
-	u.Email = r.FormValue("email")
-	u.Filename = uuid + ".png"
-	return u
-}
 
-func ListMatch(session *mgo.Session) ([]Image, error) {
+//HandleImage extracts data from a HTML form.
+//It extracts and parses the POSTed image and
+//form fields and creates a PNG and its metadata.
+//The image is saved to its configured web root.
+//The function returns the image metadata to be
+//persisted.
+func (g Gallery) HandleImage(r *http.Request, session *mgo.Session) error {
+
 	defer session.Close()
-	c := session.DB("gallery").C("pictures")
-	var results []Image
-	err := c.Find(bson.M{"published": true}).All(&results)
-	return results, err
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		return err
+	}
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return err
+	}
+
+	bounds := img.Bounds()
+
+	if uint(bounds.Max.X) < g.Config.MinWidth || uint(bounds.Max.Y) < g.Config.MinHeight {
+		return errors.New("Image must be at least 480x480.")
+	}
+
+	meta := NewImage(r)
+	meta.Width = bounds.Max.X
+	meta.Height = bounds.Max.Y
+
+	if err = g.SaveImage(&img, meta.Filename); err != nil {
+		return err
+	}
+
+	if err = meta.Persist(session); err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
-//Persist stores contents of *Upload in a MongoDB
-//database. It returns error.
-func (u Image) Persist(session *mgo.Session) error {
-	defer session.Close()
-	c := session.DB("gallery").C("pictures")
-	return c.Insert(u)
+//SaveImage decodes a JPG/GIF/PNG file. It takes the file
+//portion of a mime/multipart Form and a filename as arguments.
+//Image data is checked against size constraints and the file
+//is written to disk.
+func (g Gallery) SaveImage(i *image.Image, out string) error {
+	outf, err := os.Create(filepath.Join(g.Config.OutDir, out))
+	if err != nil {
+		return err
+	}
+	return png.Encode(outf, *i)
+}
+
+//HandleUpload extracts an image from multipart/form-data
+//received via HTTP POST. It creates a new github.com/easy-bot/httputil/response.Body
+//for later marshalling and return to the requesting client.
+func (g Gallery) HandleUpload(w http.ResponseWriter, r *http.Request) {
+
+	res := response.New()
+	err := g.HandleImage(r, g.DbPool.Copy())
+
+	if err != nil {
+		log.Printf("Could not process image upload %s", err)
+		res.Fatal(err.Error())
+	}
+
+
+	SendResponse(w, res)
+}
+//ListImages queries MongoDB for a list of published images.
+func (g Gallery) ListImages(w http.ResponseWriter, r *http.Request) {
+
+	res := response.New()
+
+	images, err := ListPublished(g.DbPool.Copy())
+
+	if err != nil {
+		log.Println(err)
+		res.Fatal("Image search failed.")
+	}
+
+	if len(images) > 0 {
+		j, err := json.Marshal(images)
+
+		if err != nil {
+			log.Println(err)
+			res.Fatal("Could not parse image list.")
+		}
+
+		if j != nil {
+			res.Data = string(j)
+		}
+	}
+
+
+	SendResponse(w, res)
+}
+
+//SendResponse serializes a httputil.response.Body into JSON
+//and sends it to the requesting process.
+// Call http.ResponseWriter.WriteHeader if you need to send
+// a return code other than 200.
+func SendResponse(w http.ResponseWriter, res response.Body) {
+
+	json, err := res.Json()
+	if err != nil {
+		log.Fatal("Could not marhal response body.")
+	}
+
+	fmt.Fprint(w, json)
+}
+
+func NewGallery(c *Config) *Gallery {
+
+	session, err :=  mgo.Dial(c.Database)
+	if err != nil {
+		panic(err)
+	}
+
+	session.SetMode(mgo.Monotonic, true)
+
+	return &Gallery{c, session}
+
 }
