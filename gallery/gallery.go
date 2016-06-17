@@ -15,13 +15,13 @@ import (
 
 	"github.com/easy-bot/httputil/response"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type Gallery struct {
 	Config *Config
 	DbPool *mgo.Session
 }
-
 
 //HandleImage extracts data from a HTML form.
 //It extracts and parses the POSTed image and
@@ -69,7 +69,7 @@ func (g Gallery) HandleImage(r *http.Request, session *mgo.Session) error {
 //Image data is checked against size constraints and the file
 //is written to disk.
 func (g Gallery) SaveImage(i *image.Image, out string) error {
-	outf, err := os.Create(filepath.Join(g.Config.OutDir, out))
+	outf, err := os.Create(filepath.Join(g.Config.ImageDir, out))
 	if err != nil {
 		return err
 	}
@@ -80,27 +80,38 @@ func (g Gallery) SaveImage(i *image.Image, out string) error {
 //received via HTTP POST. It creates a new github.com/easy-bot/httputil/response.Body
 //for later marshalling and return to the requesting client.
 func (g Gallery) HandleUpload(w http.ResponseWriter, r *http.Request) {
-
 	res := response.New()
 	err := g.HandleImage(r, g.DbPool.Copy())
 
 	if err != nil {
-		log.Printf("Could not process image upload %s", err)
+		log.Printf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
 		res.Fatal(err.Error())
 	}
 
-
-	SendResponse(w, res)
+	SendResponse(w, r, res)
 }
-//ListImages queries MongoDB for a list of published images.
-func (g Gallery) ListImages(w http.ResponseWriter, r *http.Request) {
 
+func (g Gallery) ListAll(w http.ResponseWriter, r *http.Request) {
+	g.ListImages(w, r, nil)
+}
+
+func (g Gallery) ListPublished(w http.ResponseWriter, r *http.Request) {
+	g.ListImages(w, r, bson.M{"published": true})
+}
+
+//ListImages queries MongoDB for a list of published images.
+func (g Gallery) ListImages(w http.ResponseWriter, r *http.Request, q bson.M) {
 	res := response.New()
 
-	images, err := ListPublished(g.DbPool.Copy())
+	session := g.DbPool.Copy()
+	defer session.Close()
+	c := session.DB("gallery").C("pictures")
+
+	var images []Image
+	err := c.Find(q).All(&images)
 
 	if err != nil {
-		log.Println(err)
+		log.Printf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
 		res.Fatal("Image search failed.")
 	}
 
@@ -108,7 +119,7 @@ func (g Gallery) ListImages(w http.ResponseWriter, r *http.Request) {
 		j, err := json.Marshal(images)
 
 		if err != nil {
-			log.Println(err)
+			log.Printf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
 			res.Fatal("Could not parse image list.")
 		}
 
@@ -117,33 +128,28 @@ func (g Gallery) ListImages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-
-	SendResponse(w, res)
+	SendResponse(w, r, res)
 }
 
 //SendResponse serializes a httputil.response.Body into JSON
 //and sends it to the requesting process.
 // Call http.ResponseWriter.WriteHeader if you need to send
 // a return code other than 200.
-func SendResponse(w http.ResponseWriter, res response.Body) {
-
+func SendResponse(w http.ResponseWriter, r *http.Request, res response.Body) {
 	json, err := res.Json()
 	if err != nil {
 		log.Fatal("Could not marhal response body.")
 	}
-
+	w.Header().Add("Access-Control-Allow-Origin", "http://www.rtctel.com")
+	log.Println(json)
 	fmt.Fprint(w, json)
 }
 
 func NewGallery(c *Config) *Gallery {
-
-	session, err :=  mgo.Dial(c.Database)
+	session, err := mgo.Dial(c.Database)
 	if err != nil {
 		panic(err)
 	}
-
 	session.SetMode(mgo.Monotonic, true)
-
 	return &Gallery{c, session}
-
 }

@@ -1,20 +1,24 @@
 package gallery
 
 import (
+	"net/http"
+
 	"github.com/satori/go.uuid"
 	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
-	"net/http"
 )
 
 //ImageUpload is the metadata for an uploaded image.
 //Filename is a string representation of a generated
 //UUID. The rest is self explanatory
 type Image struct {
+	UUID      string
 	FirstName string
 	LastName  string
 	Email     string
 	Address   string
+	City      string
+	State     string
+	Zip       string
 	Filename  string
 	Width     int
 	Height    int
@@ -24,22 +28,17 @@ type Image struct {
 //New creates a new ImageUpload struct. It takes a pointer to http.Request
 //as an argument and returns a pointer to Data.
 func NewImage(r *http.Request) *Image {
-	uuid := uuid.NewV4().String()
 	u := &Image{}
+	u.UUID = uuid.NewV4().String()
 	u.FirstName = r.FormValue("fname")
 	u.LastName = r.FormValue("lname")
 	u.Address = r.FormValue("address")
+	u.City = r.FormValue("city")
+	u.State = r.FormValue("state")
+	u.Zip = r.FormValue("zip")
 	u.Email = r.FormValue("email")
-	u.Filename = uuid + ".png"
+	u.Filename = u.UUID + ".png"
 	return u
-}
-
-func ListPublished(session *mgo.Session) ([]Image, error) {
-	defer session.Close()
-	c := session.DB("gallery").C("pictures")
-	var results []Image
-	err := c.Find(bson.M{"published": true}).All(&results)
-	return results, err
 }
 
 //Persist stores contents of *Upload in a MongoDB

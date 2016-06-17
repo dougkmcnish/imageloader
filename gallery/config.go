@@ -9,6 +9,6 @@ type Config struct {
 	MaxWidth    uint
 	MaxHeight   uint
 	TemplateDir string
-	OutDir      string
+	ImageDir    string
 	Database    string
 }

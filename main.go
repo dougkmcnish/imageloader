@@ -13,6 +13,13 @@ import (
 	"github.com/easy-bot/imageloader/gallery"
 )
 
+func Log(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
+		h.ServeHTTP(w, r)
+	})
+}
+
 func ProcessArgs() *gallery.Config {
 	tpl := flag.String("templates", "static", "Directory containing an index.html template.")
 	minh := flag.Int("minheight", 480, "Minimum image height.")
@@ -39,8 +46,9 @@ func main() {
 	g := gallery.NewGallery(c)
 	defer g.DbPool.Close()
 
-	http.HandleFunc("/images/upload", g.HandleUpload)
-	http.HandleFunc("/images/", g.ListImages)
+	http.HandleFunc("/gallery/upload/", g.HandleUpload)
+	http.HandleFunc("/gallery/published/", g.ListPublished)
+	http.HandleFunc("/gallery/", g.ListAll)
 	http.Handle("/", http.FileServer(http.Dir(c.TemplateDir)))
-	log.Fatal(http.ListenAndServe(c.Listen, nil))
+	log.Fatal(http.ListenAndServe(c.Listen, Log(http.DefaultServeMux)))
 }
