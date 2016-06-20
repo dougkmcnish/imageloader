@@ -21,7 +21,7 @@ func Log(h http.Handler) http.Handler {
 }
 
 func ProcessArgs() *gallery.Config {
-	tpl := flag.String("templates", "static", "Directory containing an index.html template.")
+	tpl := flag.String("templates", "static", "Directory containing an index.html.tmpl template.")
 	minh := flag.Int("minheight", 480, "Minimum image height.")
 	minw := flag.Int("minwidth", 480, "Minimum image Width")
 	out := flag.String("output", "images", "Directory where images can be saved.")
@@ -49,6 +49,7 @@ func main() {
 	http.HandleFunc("/gallery/upload/", g.HandleUpload)
 	http.HandleFunc("/gallery/published/", g.ListPublished)
 	http.HandleFunc("/gallery/", g.ListAll)
+	http.HandleFunc("/gallery/view/", g.ViewAll)
 	http.Handle("/", http.FileServer(http.Dir(c.TemplateDir)))
 	log.Fatal(http.ListenAndServe(c.Listen, Log(http.DefaultServeMux)))
 }

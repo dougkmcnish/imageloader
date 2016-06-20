@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{.Title}}</title>
+    <link href="/assets/skeleton/css/skeleton.css" rel="stylesheet" >
+    <link href="/assets/skeleton/css/normalize.css" rel="stylesheet" >
+    <style>
+        .navbar,
+        .underline {border-bottom: 1px solid #E1E1E1;}
+        .pictures .row {padding-top: 5px; white-space: nowrap; margin-bottom: 15px;}
+        button.publish { margin-top: 15px;}
+        .published {background-color: #adff2f;}
+        @media (min-width: 750px) {
+            button.publish { margin-top: 80px; float: right;}
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="navbar">
+        <h1>Image Publisher</h1>
+    </div>
+</div>
+
+<div class="pictures container">
+    {{range .Images}}
+    <div class="row underline">
+        <div class="three columns">
+            <a href="/images/{{.Filename}}" target="_blank"><img src="/images/thumb_{{.Filename}}"></a>
+        </div>
+        <div  class="five columns">
+            <div class="underline"><strong>{{.Filename}}</strong></div>
+            <strong>{{.FirstName}} {{.LastName}}</strong><br />
+            {{.Address}}<br />
+            {{.City}}, {{.State }} {{.Zip}}<br />
+        </div>
+        <div class="four columns">
+            <button class="publish button-primary">Publish</button>
+        </div>
+    </div>
+    {{ end }}
+</div>
+
+</body>
+</html>

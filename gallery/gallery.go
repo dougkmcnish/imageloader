@@ -16,11 +16,18 @@ import (
 	"github.com/easy-bot/httputil/response"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	"html/template"
+	"github.com/nfnt/resize"
 )
 
 type Gallery struct {
 	Config *Config
 	DbPool *mgo.Session
+}
+
+type Page struct {
+	Images []Image
+	Title string
 }
 
 //HandleImage extracts data from a HTML form.
@@ -52,6 +59,12 @@ func (g Gallery) HandleImage(r *http.Request, session *mgo.Session) error {
 	meta.Width = bounds.Max.X
 	meta.Height = bounds.Max.Y
 
+	thumb := resize.Thumbnail(200, 150, img, resize.Lanczos3)
+
+	if err = g.SaveImage(&thumb, "thumb_" + meta.Filename); err != nil {
+		return err
+	}
+
 	if err = g.SaveImage(&img, meta.Filename); err != nil {
 		return err
 	}
@@ -64,12 +77,15 @@ func (g Gallery) HandleImage(r *http.Request, session *mgo.Session) error {
 
 }
 
+
+
 //SaveImage decodes a JPG/GIF/PNG file. It takes the file
 //portion of a mime/multipart Form and a filename as arguments.
 //Image data is checked against size constraints and the file
 //is written to disk.
 func (g Gallery) SaveImage(i *image.Image, out string) error {
 	outf, err := os.Create(filepath.Join(g.Config.ImageDir, out))
+	defer outf.Close()
 	if err != nil {
 		return err
 	}
@@ -89,6 +105,25 @@ func (g Gallery) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SendResponse(w, r, res)
+}
+
+func (g Gallery) ViewAll(w http.ResponseWriter, r *http.Request) {
+	session := g.DbPool.Copy()
+	defer session.Close()
+	c := session.DB("gallery").C("pictures")
+	var images []Image
+	err := c.Find(nil).All(&images)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Print("Could not look up images")
+	}
+
+	t := template.Must(template.ParseFiles("C:/Users/dmcnish/Documents/Go/src/github.com/easy-bot/imageloader/templates/index.html.tmpl"))
+
+	p := &Page{Title: "This is a page", Images: images}
+
+	t.Execute(w,p)
 }
 
 func (g Gallery) ListAll(w http.ResponseWriter, r *http.Request) {
