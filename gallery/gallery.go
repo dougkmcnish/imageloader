@@ -18,6 +18,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 	"html/template"
 	"github.com/nfnt/resize"
+	"github.com/abbot/go-http-auth"
 )
 
 type Gallery struct {
@@ -77,8 +78,6 @@ func (g Gallery) HandleImage(r *http.Request, session *mgo.Session) error {
 
 }
 
-
-
 //SaveImage decodes a JPG/GIF/PNG file. It takes the file
 //portion of a mime/multipart Form and a filename as arguments.
 //Image data is checked against size constraints and the file
@@ -107,7 +106,7 @@ func (g Gallery) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	SendResponse(w, r, res)
 }
 
-func (g Gallery) ViewAll(w http.ResponseWriter, r *http.Request) {
+func (g Gallery) Publisher(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
 	session := g.DbPool.Copy()
 	defer session.Close()
 	c := session.DB("gallery").C("pictures")
@@ -119,7 +118,7 @@ func (g Gallery) ViewAll(w http.ResponseWriter, r *http.Request) {
 		fmt.Print("Could not look up images")
 	}
 
-	t := template.Must(template.ParseFiles("C:/Users/dmcnish/Documents/Go/src/github.com/easy-bot/imageloader/templates/index.html.tmpl"))
+	t := template.Must(template.ParseFiles(filepath.Join(g.Config.TemplateDir, "index.html.tmpl")))
 
 	p := &Page{Title: "This is a page", Images: images}
 
@@ -127,15 +126,15 @@ func (g Gallery) ViewAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g Gallery) ListAll(w http.ResponseWriter, r *http.Request) {
-	g.ListImages(w, r, nil)
+	g.ImageList(w, r, nil)
 }
 
 func (g Gallery) ListPublished(w http.ResponseWriter, r *http.Request) {
-	g.ListImages(w, r, bson.M{"published": true})
+	g.ImageList(w, r, bson.M{"published": true})
 }
 
 //ListImages queries MongoDB for a list of published images.
-func (g Gallery) ListImages(w http.ResponseWriter, r *http.Request, q bson.M) {
+func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 	res := response.New()
 
 	session := g.DbPool.Copy()
@@ -151,7 +150,13 @@ func (g Gallery) ListImages(w http.ResponseWriter, r *http.Request, q bson.M) {
 	}
 
 	if len(images) > 0 {
-		j, err := json.Marshal(images)
+		files := make([]string, len(images))
+
+		for i, e := range images {
+			files[i] = e.Filename
+		}
+
+		j, err := json.Marshal(files)
 
 		if err != nil {
 			log.Printf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)

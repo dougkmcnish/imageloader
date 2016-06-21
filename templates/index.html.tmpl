@@ -34,6 +34,9 @@
             <strong>{{.FirstName}} {{.LastName}}</strong><br />
             {{.Address}}<br />
             {{.City}}, {{.State }} {{.Zip}}<br />
+            {{if .Published}}
+            <span class="published">Published</span>
+            {{end}}
         </div>
         <div class="four columns">
             <button class="publish button-primary">Publish</button>
