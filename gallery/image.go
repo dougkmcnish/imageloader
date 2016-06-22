@@ -5,6 +5,7 @@ import (
 
 	"github.com/satori/go.uuid"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 //ImageUpload is the metadata for an uploaded image.
@@ -39,6 +40,12 @@ func NewImage(r *http.Request) *Image {
 	u.Email = r.FormValue("email")
 	u.Filename = u.UUID + ".png"
 	return u
+}
+
+func (u Image) Publish(session *mgo.Session) error {
+	defer session.Close()
+	c := session.DB("gallery").C("pictures")
+	return c.Update(bson.M{"uuid": u.UUID}, bson.M{"published": true})
 }
 
 //Persist stores contents of *Upload in a MongoDB

@@ -15,7 +15,7 @@ import (
 
 func Log(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
+		log.Printf("%v %v %v", r.RemoteAddr, r.Method, r.URL)
 		h.ServeHTTP(w, r)
 	})
 }
@@ -51,10 +51,11 @@ func main() {
 	authenticator := auth.NewBasicAuthenticator("Gallery", htpasswd)
 
 	//Routes
-	http.HandleFunc("/gallery/upload/", g.HandleUpload)
+	http.HandleFunc("/gallery/upload/", g.Upload)
 	http.HandleFunc("/gallery/published/", g.ListPublished)
 	http.HandleFunc("/gallery/", g.ListAll)
 	http.HandleFunc("/gallery/view/", authenticator.Wrap(g.Publisher))
+	http.HandleFunc("/gallery/publish/", authenticator.Wrap(g.Publish))
 
 	http.Handle("/", http.FileServer(http.Dir(c.TemplateDir)))
 	log.Fatal(http.ListenAndServe(c.Listen, Log(http.DefaultServeMux)))

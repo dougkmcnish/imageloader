@@ -37,40 +37,41 @@ type Page struct {
 //The image is saved to its configured web root.
 //The function returns the image metadata to be
 //persisted.
-func (g Gallery) HandleImage(r *http.Request, session *mgo.Session) error {
-
+func (g Gallery) ProcessImage(r *http.Request) error {
+	session := g.DbPool.Copy()
 	defer session.Close()
+
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		return err
 	}
 
-	img, _, err := image.Decode(file)
+	i, _, err := image.Decode(file)
 	if err != nil {
 		return err
 	}
 
-	bounds := img.Bounds()
+	bounds := i.Bounds()
 
 	if uint(bounds.Max.X) < g.Config.MinWidth || uint(bounds.Max.Y) < g.Config.MinHeight {
 		return errors.New("Image must be at least 480x480.")
 	}
 
-	meta := NewImage(r)
-	meta.Width = bounds.Max.X
-	meta.Height = bounds.Max.Y
+	image := NewImage(r)
+	image.Width = bounds.Max.X
+	image.Height = bounds.Max.Y
 
-	thumb := resize.Thumbnail(200, 150, img, resize.Lanczos3)
+	thumb := resize.Thumbnail(200, 150, i, resize.Lanczos3)
 
-	if err = g.SaveImage(&thumb, "thumb_" + meta.Filename); err != nil {
+	if err = g.SaveImage(&thumb, "thumb_" + image.Filename); err != nil {
 		return err
 	}
 
-	if err = g.SaveImage(&img, meta.Filename); err != nil {
+	if err = g.SaveImage(&i, image.Filename); err != nil {
 		return err
 	}
 
-	if err = meta.Persist(session); err != nil {
+	if err = image.Persist(session); err != nil {
 		return err
 	}
 
@@ -94,16 +95,45 @@ func (g Gallery) SaveImage(i *image.Image, out string) error {
 //HandleUpload extracts an image from multipart/form-data
 //received via HTTP POST. It creates a new github.com/easy-bot/httputil/response.Body
 //for later marshalling and return to the requesting client.
-func (g Gallery) HandleUpload(w http.ResponseWriter, r *http.Request) {
+func (g Gallery) Upload(w http.ResponseWriter, r *http.Request) {
 	res := response.New()
-	err := g.HandleImage(r, g.DbPool.Copy())
+	err := g.ProcessImage(r)
 
 	if err != nil {
-		log.Printf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
+		log.Printf("%v %v %v %v", r.RemoteAddr, r.Method, r.URL, err.Error())
+		w.WriteHeader(http.StatusBadRequest)
 		res.Fatal(err.Error())
 	}
 
-	SendResponse(w, r, res)
+	SendResponse(w, res)
+}
+
+func (g Gallery) Publish(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
+	res := response.New()
+	i := r.Form.Get("i")
+
+	if i == "" {
+		log.Printf("Missing user input")
+		res.Fatal("UUID required")
+		w.WriteHeader(http.StatusBadRequest)
+		SendResponse(w, res)
+		return
+	}
+
+	session := g.DbPool.Copy()
+	defer session.Close()
+	c := session.DB("gallery").C("pictures")
+
+	err := c.Update(bson.M{"uuid": i}, bson.M{"published": true})
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Print("Could not look up images")
+	}
+
+
+
+	SendResponse(w, res)
 }
 
 func (g Gallery) Publisher(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
@@ -115,12 +145,13 @@ func (g Gallery) Publisher(w http.ResponseWriter, r *auth.AuthenticatedRequest) 
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Print("Could not look up images")
+		fmt.Print(w, "DB lookup failed.")
+		return
 	}
 
 	t := template.Must(template.ParseFiles(filepath.Join(g.Config.TemplateDir, "index.html.tmpl")))
 
-	p := &Page{Title: "This is a page", Images: images}
+	p := &Page{Title: "Image publisher.", Images: images}
 
 	t.Execute(w,p)
 }
@@ -145,7 +176,7 @@ func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 	err := c.Find(q).All(&images)
 
 	if err != nil {
-		log.Printf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
+		log.Printf("%v %v %v %v", r.RemoteAddr, r.Method, r.URL, err)
 		res.Fatal("Image search failed.")
 	}
 
@@ -159,7 +190,7 @@ func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 		j, err := json.Marshal(files)
 
 		if err != nil {
-			log.Printf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
+			log.Printf("%v %v %v %v", r.RemoteAddr, r.Method, r.URL, err)
 			res.Fatal("Could not parse image list.")
 		}
 
@@ -168,14 +199,14 @@ func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 		}
 	}
 
-	SendResponse(w, r, res)
+	SendResponse(w, res)
 }
 
 //SendResponse serializes a httputil.response.Body into JSON
 //and sends it to the requesting process.
 // Call http.ResponseWriter.WriteHeader if you need to send
 // a return code other than 200.
-func SendResponse(w http.ResponseWriter, r *http.Request, res response.Body) {
+func SendResponse(w http.ResponseWriter, res response.Body) {
 	json, err := res.Json()
 	if err != nil {
 		log.Fatal("Could not marhal response body.")
