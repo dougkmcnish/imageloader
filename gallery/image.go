@@ -28,7 +28,7 @@ type Image struct {
 
 //New creates a new ImageUpload struct. It takes a pointer to http.Request
 //as an argument and returns a pointer to Data.
-func NewImage(r *http.Request) *Image {
+func New(r *http.Request) *Image {
 	u := &Image{}
 	u.UUID = uuid.NewV4().String()
 	u.FirstName = r.FormValue("fname")

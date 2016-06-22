@@ -57,7 +57,7 @@ func (g Gallery) ProcessImage(r *http.Request) error {
 		return errors.New("Image must be at least 480x480.")
 	}
 
-	image := NewImage(r)
+	image := New(r)
 	image.Width = bounds.Max.X
 	image.Height = bounds.Max.Y
 
