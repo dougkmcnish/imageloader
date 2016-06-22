@@ -8,8 +8,8 @@ type Config struct {
 	MinHeight   uint
 	MaxWidth    uint
 	MaxHeight   uint
-	TemplateDir string
-	ImageDir    string
+	AssetDir    string
+	PubDir      string
 	DatabaseURI string
 	DB          string
 	C           string

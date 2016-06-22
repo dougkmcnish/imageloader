@@ -41,6 +41,12 @@ func (g Gallery) ProcessImage(r *http.Request) error {
 	session := g.DbPool.Copy()
 	defer session.Close()
 
+	imgData := NewImage(r)
+
+	if res, err := imgData.Valid(); !res {
+		return err
+	}
+
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		return err
@@ -57,21 +63,20 @@ func (g Gallery) ProcessImage(r *http.Request) error {
 		return errors.New("Image must be at least 480x480.")
 	}
 
-	image := NewImage(r)
-	image.Width = bounds.Max.X
-	image.Height = bounds.Max.Y
+	imgData.Width = bounds.Max.X
+	imgData.Height = bounds.Max.Y
 
 	thumb := resize.Thumbnail(200, 150, i, resize.Lanczos3)
 
-	if err = image.Persist(session); err != nil {
+	if err = imgData.Persist(session); err != nil {
 		return err
 	}
 
-	if err = g.SaveImage(&thumb, "thumb_"+image.Filename); err != nil {
+	if err = g.SaveImage(&thumb, "thumb_"+ imgData.Filename); err != nil {
 		return err
 	}
 
-	if err = g.SaveImage(&i, image.Filename); err != nil {
+	if err = g.SaveImage(&i, imgData.Filename); err != nil {
 		return err
 	}
 
@@ -84,7 +89,7 @@ func (g Gallery) ProcessImage(r *http.Request) error {
 //Image data is checked against size constraints and the file
 //is written to disk.
 func (g Gallery) SaveImage(i *image.Image, out string) error {
-	outf, err := os.Create(filepath.Join(g.Config.ImageDir, out))
+	outf, err := os.Create(filepath.Join(g.Config.PubDir, out))
 	defer outf.Close()
 	if err != nil {
 		return err
@@ -145,7 +150,7 @@ func (g Gallery) Publisher(w http.ResponseWriter, r *auth.AuthenticatedRequest) 
 		return
 	}
 
-	t := template.Must(template.ParseFiles(filepath.Join(g.Config.TemplateDir, "index.html.tmpl")))
+	t := template.Must(template.ParseFiles(filepath.Join(g.Config.AssetDir, "index.html.tmpl")))
 	p := &Page{Title: "Image publisher.", Images: images}
 
 	t.Execute(w, p)
@@ -207,7 +212,6 @@ func SendResponse(w http.ResponseWriter, res response.Body) {
 		log.Fatal("Could not marhal response body.")
 	}
 	w.Header().Add("Access-Control-Allow-Origin", "http://www.rtctel.com")
-	log.Println(json)
 	fmt.Fprint(w, json)
 }
 

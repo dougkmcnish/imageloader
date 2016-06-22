@@ -11,6 +11,8 @@ import (
 	"os"
 	auth "github.com/abbot/go-http-auth"
 	"github.com/easy-bot/imageloader/gallery"
+	"fmt"
+	"path/filepath"
 )
 
 func Log(h http.Handler) http.Handler {
@@ -21,7 +23,7 @@ func Log(h http.Handler) http.Handler {
 }
 
 func ProcessArgs() *gallery.Config {
-	tpl := flag.String("templates", "static", "Directory containing an index.html.tmpl template.")
+	assets := flag.String("assets", "assets", "Directory containing private application assets.")
 	minh := flag.Int("minheight", 480, "Minimum image height.")
 	minw := flag.Int("minwidth", 480, "Minimum image Width")
 	public := flag.String("public", "public", "Directory for storing public assets.\n\tThis is where image files will be saved.")
@@ -35,14 +37,14 @@ func ProcessArgs() *gallery.Config {
 
 	log.Printf("\nRuntime:\n\n")
 	log.Printf("Current working directory: %v", wd)
-	log.Printf("Templates: %v", *tpl)
-	log.Printf("Images: %v", *public)
+	log.Printf("Private Assets: %v", *assets)
+	log.Printf("Public Files: %v", *public)
 	log.Printf("Port: %v", *port)
 	log.Printf("URI: %v", *uri)
 	log.Printf("Database: %v", *db)
 	log.Printf("Collection: %v", *collection)
 
-	return &gallery.Config{*port, uint(*minw), uint(*minh), 0, 0, *tpl, *public, *uri, *db, *collection}
+	return &gallery.Config{*port, uint(*minw), uint(*minh), 0, 0, *assets, *public, *uri, *db, *collection}
 }
 
 func main() {
@@ -51,16 +53,26 @@ func main() {
 	defer g.DbPool.Close()
 
 	// read .htpasswd
-	htpasswd := auth.HtpasswdFileProvider("./.htpasswd")
+	htpasswd := auth.HtpasswdFileProvider(filepath.Join(c.AssetDir, ".htpasswd"))
 	authenticator := auth.NewBasicAuthenticator("Gallery", htpasswd)
 
-	//Routes
-	http.HandleFunc("/gallery/upload/", g.Upload)
-	http.HandleFunc("/gallery/published/", g.ListPublished)
-	http.HandleFunc("/gallery/", g.ListAll)
-	http.HandleFunc("/gallery/view/", authenticator.Wrap(g.Publisher))
-	http.HandleFunc("/gallery/publish/", authenticator.Wrap(g.Publish))
+	mux := http.DefaultServeMux
 
-	http.Handle("/", http.FileServer(http.Dir(c.TemplateDir)))
-	log.Fatal(http.ListenAndServe(c.Listen, Log(http.DefaultServeMux)))
+
+	//Routes
+	mux.HandleFunc("/gallery/upload/", g.Upload)
+	mux.HandleFunc("/gallery/published/", g.ListPublished)
+	mux.HandleFunc("/gallery/", g.ListAll)
+	mux.HandleFunc("/gallery/view/", authenticator.Wrap(g.Publisher))
+	mux.HandleFunc("/gallery/publish/", authenticator.Wrap(g.Publish))
+	mux.Handle("/", http.FileServer(http.Dir(c.PubDir)))
+
+	loggingHandler := gallery.NewApacheLoggingHandler(mux, os.Stderr)
+	server := &http.Server{
+		Addr: fmt.Sprintf(":%s", "8080"),
+		Handler: loggingHandler,
+	}
+
+	log.Fatal(server.ListenAndServe())
+
 }

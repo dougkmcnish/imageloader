@@ -4,27 +4,31 @@ import (
 	"net/http"
 
 	"github.com/satori/go.uuid"
+	valid "gopkg.in/asaskevich/govalidator.v4"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"gopkg.in/validator.v2"
 )
+
+func init() {
+	valid.SetFieldsRequiredByDefault(true)
+}
 
 //ImageUpload is the metadata for an uploaded image.
 //Filename is a string representation of a generated
 //UUID. The rest is self explanatory
 type Image struct {
-	UUID      string `validate:"min=36,max=36,rexexp=^[0-9][a-f]-+$"`
-	FirstName string `validate:"nonzero"`
-	LastName  string `validate:"nonzero"`
-	Email     string `validate:"nonzero,rexexp=^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$"`
-	Address   string `validate:"nonzero"`
-	City      string `validate:"nonzero"`
-	State     string `validate:"nonzero"`
-	Zip       string `validate:"nonzero,rexexp=[0-9]{5}"`
-	Filename  string `validate:"nonzero"`
-	Width     int    `validate:"nonzero"`
-	Height    int    `validate:"nonzero"`
-	Published bool
+	UUID      string `valid:"required,uuidv4"`
+	FirstName string `valid:"required~First name is required.,alpha~First Name: Invalid characters."`
+	LastName  string `valid:"required~Last name is required.,alpha"`
+	Email     string `valid:"required~Email address is required,email!Invalid email address."`
+	Address   string `valid:"optional,ascii~Invalid address."`
+	City      string `valid:"required~City is requried.,alpha~Invalid city."`
+	State     string `valid:"required~State required.,ascii,length(2|2)~Invalid state"`
+	Zip       string `valid:"required~Zip code required.,matches(^[0-9]{5}$)~Invalid ZIP code."`
+	Filename  string `valid:"required"`
+	Width     int    `valid:"-"`
+	Height    int    `valid:"-"`
+	Published bool   `valid:"-"`
 }
 
 //New creates a new ImageUpload struct. It takes a pointer to http.Request
@@ -39,7 +43,14 @@ func NewImage(r *http.Request) *Image {
 	u.State = r.FormValue("state")
 	u.Zip = r.FormValue("zip")
 	u.Email = r.FormValue("email")
+	u.Width = 0
+	u.Height = 0
 	u.Filename = u.UUID + ".png"
+
+	if u.Address == "" {
+		u.Address = "No address specified."
+	}
+
 	return u
 }
 
@@ -54,15 +65,9 @@ func (u Image) Publish(session *mgo.Session) error {
 func (u Image) Persist(session *mgo.Session) error {
 	defer session.Close()
 	c := session.DB("gallery").C("pictures")
-	if err := u.Validate(); err != nil {
-		return err
-	}
 	return c.Insert(u)
 }
 
-func (u Image) Validate() error {
-	if u.Address == "" {
-		u.Address = "No address specified."
-	}
-	return validator.Validate(u)
+func (u Image) Valid() (bool, error) {
+	return valid.ValidateStruct(u)
 }
