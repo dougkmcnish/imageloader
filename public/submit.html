@@ -1,0 +1,41 @@
+<html>
+<head>
+    <title>Uplaod image</title>
+    <link href="/assets/skeleton/css/skeleton.css" rel="stylesheet">
+    <link href="/assets/skeleton/css/normalize.css" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+    <h2>Upload Image</h2>
+
+    <form class="form-inline" id="livegig" action="/gallery/upload/" method="POST" enctype="multipart/form-data">
+
+        <p>
+            <input type="text" name="fname" id="fname" placeholder="First Name"/>
+            <input type="text" name="lname" id="lname" placeholder="Last Name"/>
+        </p>
+        <p>
+            <input type="email" id="email" name="email" placeholder="Email Address"/>
+        </p>
+        <br/>
+        <p>
+            <input type="text" name="address" id="address" placeholder="Street Address"/>
+        </p>
+        <p>
+            <input class="input-small" type="text" name="city" id="city" placeholder="City"/>
+            <select class="input-small" name="state" id="state">
+                <option value="ga" selected>GA</option>
+                <option value="tn">TN</option>
+            </select>
+            <input class="input-small" type="text" name="zip" id="zip" placeholder="Zip Code"/>
+        </p>
+        <p>
+            <label for="image">Choose a picture: </label>
+            <input type="file" id="image" name="file"/> <br/><br/>
+        </p>
+        <button type="submit" class="btn btn-success">Submit <span class="fa fa-arrow-right"></span></button>
+    </form>
+</div>
+
+</body>
+</html>

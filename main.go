@@ -24,10 +24,10 @@ func ProcessArgs() *gallery.Config {
 	tpl := flag.String("templates", "static", "Directory containing an index.html.tmpl template.")
 	minh := flag.Int("minheight", 480, "Minimum image height.")
 	minw := flag.Int("minwidth", 480, "Minimum image Width")
-	public := flag.String("output", "images", "Directory where images can be saved.")
+	public := flag.String("public", "public", "Directory for storing public assets.\n\tThis is where image files will be saved.")
 	uri := flag.String("dbhost", "localhost", "Mongodb hostname")
 	db := flag.String("db", "gallery", "Mongo databasee name.")
-	col := flag.String("collection", "pictures", "Mongo Collection Name.")
+	collection := flag.String("collection", "pictures", "Mongo Collection Name.")
 	port := flag.String("port", ":8080", "Port to listen on")
 	flag.Parse()
 
@@ -40,9 +40,9 @@ func ProcessArgs() *gallery.Config {
 	log.Printf("Port: %v", *port)
 	log.Printf("URI: %v", *uri)
 	log.Printf("Database: %v", *db)
-	log.Printf("Collection: %v", *col)
+	log.Printf("Collection: %v", *collection)
 
-	return &gallery.Config{*port, uint(*minw), uint(*minh), 0, 0, *tpl, *public, *uri}
+	return &gallery.Config{*port, uint(*minw), uint(*minh), 0, 0, *tpl, *public, *uri, *db, *collection}
 }
 
 func main() {
