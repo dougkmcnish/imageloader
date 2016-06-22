@@ -4,10 +4,10 @@ install:
 	go install
 
 win64:
-	GOOS=windows GOARCH=amd64 go build -o dist/imageloader.exe
+	GOOS=windows GOARCH=amd64 go build -o dist/imageloader64.exe
 
 win32:
-	GOOS=windows GOARCH=386 go build -o dist/imageloader.exe
+	GOOS=windows GOARCH=386 go build -o dist/imageloader32.exe
 
 linux64:
 	GOOS=linux GOARCH=amd64 go build -o dist/imageloader_linux_amd64

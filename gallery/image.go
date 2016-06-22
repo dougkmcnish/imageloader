@@ -6,29 +6,30 @@ import (
 	"github.com/satori/go.uuid"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/validator.v2"
 )
 
 //ImageUpload is the metadata for an uploaded image.
 //Filename is a string representation of a generated
 //UUID. The rest is self explanatory
 type Image struct {
-	UUID      string
-	FirstName string
-	LastName  string
-	Email     string
-	Address   string
-	City      string
-	State     string
-	Zip       string
-	Filename  string
-	Width     int
-	Height    int
+	UUID      string `validate:"min=36,max=36,rexexp=^[0-9][a-f]-+$"`
+	FirstName string `validate:"nonzero"`
+	LastName  string `validate:"nonzero"`
+	Email     string `validate:"nonzero,rexexp=^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$"`
+	Address   string `validate:"nonzero"`
+	City      string `validate:"nonzero"`
+	State     string `validate:"nonzero"`
+	Zip       string `validate:"nonzero,rexexp=[0-9]{5}"`
+	Filename  string `validate:"nonzero"`
+	Width     int    `validate:"nonzero"`
+	Height    int    `validate:"nonzero"`
 	Published bool
 }
 
 //New creates a new ImageUpload struct. It takes a pointer to http.Request
 //as an argument and returns a pointer to Data.
-func New(r *http.Request) *Image {
+func NewImage(r *http.Request) *Image {
 	u := &Image{}
 	u.UUID = uuid.NewV4().String()
 	u.FirstName = r.FormValue("fname")
@@ -53,5 +54,15 @@ func (u Image) Publish(session *mgo.Session) error {
 func (u Image) Persist(session *mgo.Session) error {
 	defer session.Close()
 	c := session.DB("gallery").C("pictures")
+	if err := u.Validate(); err != nil {
+		return err
+	}
 	return c.Insert(u)
+}
+
+func (u Image) Validate() error {
+	if u.Address == "" {
+		u.Address = "No address specified."
+	}
+	return validator.Validate(u)
 }

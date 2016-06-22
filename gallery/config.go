@@ -10,5 +10,7 @@ type Config struct {
 	MaxHeight   uint
 	TemplateDir string
 	ImageDir    string
-	Database    string
+	DatabaseURI string
+	DB          string
+	C           string
 }

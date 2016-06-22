@@ -13,12 +13,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/abbot/go-http-auth"
 	"github.com/easy-bot/httputil/response"
+	"github.com/nfnt/resize"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 	"html/template"
-	"github.com/nfnt/resize"
-	"github.com/abbot/go-http-auth"
 )
 
 type Gallery struct {
@@ -28,7 +28,7 @@ type Gallery struct {
 
 type Page struct {
 	Images []Image
-	Title string
+	Title  string
 }
 
 //HandleImage extracts data from a HTML form.
@@ -57,21 +57,21 @@ func (g Gallery) ProcessImage(r *http.Request) error {
 		return errors.New("Image must be at least 480x480.")
 	}
 
-	image := New(r)
+	image := NewImage(r)
 	image.Width = bounds.Max.X
 	image.Height = bounds.Max.Y
 
 	thumb := resize.Thumbnail(200, 150, i, resize.Lanczos3)
 
-	if err = g.SaveImage(&thumb, "thumb_" + image.Filename); err != nil {
+	if err = image.Persist(session); err != nil {
+		return err
+	}
+
+	if err = g.SaveImage(&thumb, "thumb_"+image.Filename); err != nil {
 		return err
 	}
 
 	if err = g.SaveImage(&i, image.Filename); err != nil {
-		return err
-	}
-
-	if err = image.Persist(session); err != nil {
 		return err
 	}
 
@@ -101,7 +101,6 @@ func (g Gallery) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("%v %v %v %v", r.RemoteAddr, r.Method, r.URL, err.Error())
-		w.WriteHeader(http.StatusBadRequest)
 		res.Fatal(err.Error())
 	}
 
@@ -122,7 +121,7 @@ func (g Gallery) Publish(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
 
 	session := g.DbPool.Copy()
 	defer session.Close()
-	c := session.DB("gallery").C("pictures")
+	c := session.DB(g.Config.DB).C(g.Config.C)
 
 	err := c.Update(bson.M{"uuid": i}, bson.M{"published": true})
 
@@ -130,16 +129,13 @@ func (g Gallery) Publish(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Print("Could not look up images")
 	}
-
-
-
 	SendResponse(w, res)
 }
 
 func (g Gallery) Publisher(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
 	session := g.DbPool.Copy()
 	defer session.Close()
-	c := session.DB("gallery").C("pictures")
+	c := session.DB(g.Config.DB).C(g.Config.C)
 	var images []Image
 	err := c.Find(nil).All(&images)
 
@@ -150,10 +146,9 @@ func (g Gallery) Publisher(w http.ResponseWriter, r *auth.AuthenticatedRequest) 
 	}
 
 	t := template.Must(template.ParseFiles(filepath.Join(g.Config.TemplateDir, "index.html.tmpl")))
-
 	p := &Page{Title: "Image publisher.", Images: images}
 
-	t.Execute(w,p)
+	t.Execute(w, p)
 }
 
 func (g Gallery) ListAll(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +165,7 @@ func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 
 	session := g.DbPool.Copy()
 	defer session.Close()
-	c := session.DB("gallery").C("pictures")
+	c := session.DB(g.Config.DB).C(g.Config.C)
 
 	var images []Image
 	err := c.Find(q).All(&images)
@@ -217,7 +212,7 @@ func SendResponse(w http.ResponseWriter, res response.Body) {
 }
 
 func NewGallery(c *Config) *Gallery {
-	session, err := mgo.Dial(c.Database)
+	session, err := mgo.Dial(c.DatabaseURI)
 	if err != nil {
 		panic(err)
 	}

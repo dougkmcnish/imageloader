@@ -25,20 +25,24 @@ func ProcessArgs() *gallery.Config {
 	minh := flag.Int("minheight", 480, "Minimum image height.")
 	minw := flag.Int("minwidth", 480, "Minimum image Width")
 	public := flag.String("output", "images", "Directory where images can be saved.")
-	db := flag.String("db", "localhost", "Mongodb hostname")
+	uri := flag.String("dbhost", "localhost", "Mongodb hostname")
+	db := flag.String("db", "gallery", "Mongo databasee name.")
+	col := flag.String("collection", "pictures", "Mongo Collection Name.")
 	port := flag.String("port", ":8080", "Port to listen on")
 	flag.Parse()
 
 	wd, _ := os.Getwd()
 
 	log.Printf("\nRuntime:\n\n")
-	log.Printf("Current working directory: %s", wd)
-	log.Printf("Templates: %s", *tpl)
-	log.Printf("Images: %s", *public)
-	log.Printf("Port: %s", *port)
-	log.Printf("Database: %s", *db)
+	log.Printf("Current working directory: %v", wd)
+	log.Printf("Templates: %v", *tpl)
+	log.Printf("Images: %v", *public)
+	log.Printf("Port: %v", *port)
+	log.Printf("URI: %v", *uri)
+	log.Printf("Database: %v", *db)
+	log.Printf("Collection: %v", *col)
 
-	return &gallery.Config{*port, uint(*minw), uint(*minh), 0, 0, *tpl, *public, *db}
+	return &gallery.Config{*port, uint(*minw), uint(*minh), 0, 0, *tpl, *public, *uri}
 }
 
 func main() {
