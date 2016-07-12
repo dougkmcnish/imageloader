@@ -32,7 +32,7 @@
         <div  class="five columns">
             <div class="underline"><strong>{{.Filename}}</strong></div>
             <strong>{{.FirstName}} {{.LastName}}</strong> - ({{.Email}})<br />
-            {{.Address}}<br />
+            {{if .Address}}{{.Address}}{{else}}No address defined.{{end}}<br />
             {{.City}}, {{.State }} {{.Zip}}<br />
             {{if .Published}}
             <span class="published">Published</span>

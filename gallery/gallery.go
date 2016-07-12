@@ -68,15 +68,15 @@ func (g Gallery) ProcessImage(r *http.Request) error {
 
 	thumb := resize.Thumbnail(200, 150, i, resize.Lanczos3)
 
-	if err = imgData.Persist(session); err != nil {
+	if err = g.CreateImage(imgData); err != nil {
 		return err
 	}
 
-	if err = g.SaveImage(&thumb, "thumb_"+ imgData.Filename); err != nil {
+	if err = g.SaveImageFile(&thumb, "thumb_"+ imgData.Filename); err != nil {
 		return err
 	}
 
-	if err = g.SaveImage(&i, imgData.Filename); err != nil {
+	if err = g.SaveImageFile(&i, imgData.Filename); err != nil {
 		return err
 	}
 
@@ -84,11 +84,37 @@ func (g Gallery) ProcessImage(r *http.Request) error {
 
 }
 
-//SaveImage decodes a JPG/GIF/PNG file. It takes the file
+//Persist stores contents of *Upload in a MongoDB
+//database. It returns error.
+func (g Gallery) CreateImage(i Image) error {
+	session := g.DbPool.Copy()
+	defer session.Close()
+	c := session.DB(g.Config.DB).C(g.Config.C)
+	return c.Insert(i)
+}
+
+func (g Gallery) UpdateImage(i Image) error {
+	session := g.DbPool.Copy()
+	defer session.Close()
+	c := session.DB(g.Config.DB).C(g.Config.C)
+	return c.Update(bson.M{"uuid": i.UUID}, i)
+}
+
+func (g Gallery) LoadImage(query bson.M) (*Image,error) {
+	session := g.DbPool.Copy()
+	c := session.DB(g.Config.DB).C(g.Config.C)
+	image := &Image{}
+	if err := c.Find(query).One(image); err != nil {
+		return nil, err
+	}
+	return image, nil
+}
+
+//SaveImageFile decodes a JPG/GIF/PNG file. It takes the file
 //portion of a mime/multipart Form and a filename as arguments.
 //Image data is checked against size constraints and the file
 //is written to disk.
-func (g Gallery) SaveImage(i *image.Image, out string) error {
+func (g Gallery) SaveImageFile(i *image.Image, out string) error {
 	outf, err := os.Create(filepath.Join(g.Config.PubDir, out))
 	defer outf.Close()
 	if err != nil {
@@ -105,7 +131,6 @@ func (g Gallery) Upload(w http.ResponseWriter, r *http.Request) {
 	err := g.ProcessImage(r)
 
 	if err != nil {
-		log.Printf("%v %v %v %v", r.RemoteAddr, r.Method, r.URL, err.Error())
 		res.Fatal(err.Error())
 	}
 
@@ -117,23 +142,29 @@ func (g Gallery) Publish(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
 	i := r.Form.Get("i")
 
 	if i == "" {
-		log.Printf("Missing user input")
 		res.Fatal("UUID required")
-		w.WriteHeader(http.StatusBadRequest)
+		SendResponse(w, res)
+		return
+	}
+	var image Image
+	var err error
+
+	if image, err = g.LoadImage(bson.M{"uuid": i}); err != nil {
+		res.Error(fmt.Sprintf("Could not find image with ID %v", i))
 		SendResponse(w, res)
 		return
 	}
 
-	session := g.DbPool.Copy()
-	defer session.Close()
-	c := session.DB(g.Config.DB).C(g.Config.C)
+	image.Published = true
 
-	err := c.Update(bson.M{"uuid": i}, bson.M{"published": true})
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Print("Could not look up images")
+	if valid, err := image.Valid(); !valid {
+		res.Fatal(err)
 	}
+
+	if err = g.UpdateImage(image); err != nil {
+		res.Fatal(err)
+	}
+
 	SendResponse(w, res)
 }
 
@@ -176,8 +207,7 @@ func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 	err := c.Find(q).All(&images)
 
 	if err != nil {
-		log.Printf("%v %v %v %v", r.RemoteAddr, r.Method, r.URL, err)
-		res.Fatal("Image search failed.")
+		res.Fatal(fmt.Sprintf("Image search failed. %v", err))
 	}
 
 	if len(images) > 0 {
@@ -190,8 +220,7 @@ func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 		j, err := json.Marshal(files)
 
 		if err != nil {
-			log.Printf("%v %v %v %v", r.RemoteAddr, r.Method, r.URL, err)
-			res.Fatal("Could not parse image list.")
+			res.Fatal(fmt.Sprintf("Could not parse image list. %v", err))
 		}
 
 		if j != nil {
@@ -209,7 +238,7 @@ func (g Gallery) ImageList(w http.ResponseWriter, r *http.Request, q bson.M) {
 func SendResponse(w http.ResponseWriter, res response.Body) {
 	json, err := res.Json()
 	if err != nil {
-		log.Fatal("Could not marhal response body.")
+		log.Fatal(fmt.Sprintf("Could not marhal response body. %v", err))
 	}
 	w.Header().Add("Access-Control-Allow-Origin", "http://www.rtctel.com")
 	fmt.Fprint(w, json)

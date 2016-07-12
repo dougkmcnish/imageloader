@@ -3,7 +3,7 @@ package gallery
 //Config stores runtime configuration.
 //BUG(dag) Config should be serialized for later runs.
 type Config struct {
-	Listen      string
+	Port        string
 	MinWidth    uint
 	MinHeight   uint
 	MaxWidth    uint

@@ -60,13 +60,7 @@ func (u Image) Publish(session *mgo.Session) error {
 	return c.Update(bson.M{"uuid": u.UUID}, bson.M{"published": true})
 }
 
-//Persist stores contents of *Upload in a MongoDB
-//database. It returns error.
-func (u Image) Persist(session *mgo.Session) error {
-	defer session.Close()
-	c := session.DB("gallery").C("pictures")
-	return c.Insert(u)
-}
+
 
 func (u Image) Valid() (bool, error) {
 	return valid.ValidateStruct(u)

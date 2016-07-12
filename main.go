@@ -30,7 +30,7 @@ func ProcessArgs() *gallery.Config {
 	uri := flag.String("dbhost", "localhost", "Mongodb hostname")
 	db := flag.String("db", "gallery", "Mongo databasee name.")
 	collection := flag.String("collection", "pictures", "Mongo Collection Name.")
-	port := flag.String("port", ":8080", "Port to listen on")
+	port := flag.String("port", "8080", "Port to listen on")
 	flag.Parse()
 
 	wd, _ := os.Getwd()
@@ -69,7 +69,7 @@ func main() {
 
 	loggingHandler := gallery.NewApacheLoggingHandler(mux, os.Stderr)
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%s", "8080"),
+		Addr: fmt.Sprintf(":%s", c.Port),
 		Handler: loggingHandler,
 	}
 
