@@ -10,7 +10,7 @@ import (
 	"flag"
 	"os"
 	auth "github.com/abbot/go-http-auth"
-	"github.com/easy-bot/imageloader/gallery"
+	"github.com/sfsdeveloper/imageloader/gallery"
 	"fmt"
 	"path/filepath"
 )
